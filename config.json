@@ -1,0 +1,229 @@
+{
+  "adb": {
+    "path": "D:\\MuMu\\nx_device\\15.0\\shell\\adb.exe",
+    "device_serial": "127.0.0.1:7555",
+    "connect_on_start": true,
+    "command_timeout_seconds": 10,
+    "screenshot_mode": "raw"
+  },
+  "capture": {
+    "source": "window",
+    "window_title_keywords": [
+      "MuMu安卓设备"
+    ],
+    "geometry_refresh_seconds": 1.0,
+    "fallback_to_adb": true,
+    "restore_if_minimized": false
+  },
+  "screen": {
+    "expected_width": 1920,
+    "expected_height": 1080
+  },
+  "runtime": {
+    "dry_run": false,
+    "auto_confirm": true,
+    "confirm_click_point": {
+      "x": 1095,
+      "y": 660
+    },
+    "stacked_purchase_click_point": {
+      "x": 1095,
+      "y": 820
+    },
+    "max_orders_per_run": 0,
+    "poll_interval_seconds": 0.03,
+    "stacked_detection_poll_interval_seconds": 0.02,
+    "post_purchase_wait_seconds": 0.95,
+    "stacked_second_purchase_delay_seconds": 0.62,
+    "required_consecutive_publicity_absent_matches": 1,
+    "purchase_click_cooldown_seconds": 1,
+    "confirm_click_cooldown_seconds": 1,
+    "minimum_gap_between_any_clicks_seconds": 0.3,
+    "after_order_pause_seconds": 1,
+    "error_retry_limit": 5,
+    "error_retry_initial_delay_seconds": 2,
+    "error_retry_max_delay_seconds": 30,
+    "pause_after_retry_limit_seconds": 60,
+    "status_log_every_n_polls": 10
+  },
+  "recovery": {
+    "enabled": true,
+    "home_check_interval_seconds": 2.0,
+    "poll_interval_seconds": 1.0,
+    "action_cooldown_seconds": 5.0,
+    "start_page_click_point": {
+      "x": 960,
+      "y": 540
+    },
+    "server_select_click_point": {
+      "x": 1185,
+      "y": 930
+    },
+    "launch_to_start_page_seconds": 30.0,
+    "server_select_to_character_seconds": 10.0,
+    "server_character_to_start_page_seconds": 10.0,
+    "start_page_to_character_seconds": 30.0,
+    "character_to_main_ui_seconds": 30.0,
+    "commercial_to_shop_seconds": 10.0,
+    "shop_to_following_seconds": 5.0,
+    "following_to_resume_seconds": 5.0,
+    "step_timeout_seconds": 300.0
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "logs/automation.log",
+    "save_event_screenshots": false,
+    "event_screenshot_dir": "logs/events"
+  },
+  "status_detection": {
+    "selection_guard": {
+      "region": {
+        "x": 440,
+        "y": 190,
+        "width": 650,
+        "height": 190
+      },
+      "hsv_lower": [
+        80,
+        80,
+        140
+      ],
+      "hsv_upper": [
+        105,
+        255,
+        255
+      ],
+      "minimum_pixels": 5000
+    },
+    "publicity_red_text": {
+      "region": {
+        "x": 880,
+        "y": 305,
+        "width": 210,
+        "height": 65
+      },
+      "hsv_lower": [
+        155,
+        70,
+        100
+      ],
+      "hsv_upper": [
+        179,
+        255,
+        255
+      ],
+      "minimum_pixels": 150
+    },
+    "my_following_selected_guard": {
+      "region": {
+        "x": 240,
+        "y": 350,
+        "width": 120,
+        "height": 60
+      },
+      "hsv_lower": [
+        95,
+        130,
+        190
+      ],
+      "hsv_upper": [
+        104,
+        180,
+        255
+      ],
+      "minimum_pixels": 5000
+    }
+  },
+  "templates": {
+    "purchase_button": {
+      "path": "templates/purchase_button.png",
+      "threshold": 0.85,
+      "region": {
+        "x": 1400,
+        "y": 860,
+        "width": 450,
+        "height": 210
+      }
+    },
+    "stacked_purchase_button": {
+      "path": "templates/stacked_purchase_button.png",
+      "threshold": 0.85,
+      "region": {
+        "x": 950,
+        "y": 740,
+        "width": 340,
+        "height": 200
+      }
+    },
+    "confirm_order_button": {
+      "path": "templates/confirm_order_button.png",
+      "threshold": 0.85,
+      "region": {
+        "x": 900,
+        "y": 520,
+        "width": 450,
+        "height": 280
+      }
+    },
+    "launcher_game_icon": {
+      "path": "templates/recovery/launcher_game_icon.png",
+      "threshold": 0.8,
+      "region": {
+        "x": 1450,
+        "y": 430,
+        "width": 400,
+        "height": 300
+      }
+    },
+    "server_first_character": {
+      "path": "templates/recovery/server_first_character.png",
+      "threshold": 0.8,
+      "region": {
+        "x": 500,
+        "y": 150,
+        "width": 400,
+        "height": 420
+      }
+    },
+    "character_start_button": {
+      "path": "templates/recovery/character_start_button.png",
+      "threshold": 0.8,
+      "region": {
+        "x": 1550,
+        "y": 750,
+        "width": 370,
+        "height": 330
+      }
+    },
+    "commercial_street_button": {
+      "path": "templates/recovery/commercial_street_button.png",
+      "threshold": 0.7,
+      "region": {
+        "x": 900,
+        "y": 0,
+        "width": 450,
+        "height": 250
+      }
+    },
+    "shop_tab": {
+      "path": "templates/recovery/shop_tab.png",
+      "threshold": 0.7,
+      "region": {
+        "x": 1760,
+        "y": 250,
+        "width": 160,
+        "height": 450
+      }
+    },
+    "my_following_tab": {
+      "path": "templates/recovery/my_following_tab.png",
+      "threshold": 0.65,
+      "region": {
+        "x": 0,
+        "y": 200,
+        "width": 500,
+        "height": 450
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+.venv.*/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# ===== 运行产物 =====
+logs/
+*.log
+work/
+events/
+
+# ===== 编辑器 / IDE =====
+.vscode/
+.idea/
+*.swp
+
+# ===== 系统文件 =====
+.DS_Store
+Thumbs.db
+desktop.ini
