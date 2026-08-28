@@ -28,13 +28,14 @@
     },
     "stacked_purchase_click_point": {
       "x": 1095,
-      "y": 820
+      "y": 990
     },
     "max_orders_per_run": 0,
     "poll_interval_seconds": 0.03,
     "stacked_detection_poll_interval_seconds": 0.02,
-    "post_purchase_wait_seconds": 0.95,
-    "stacked_second_purchase_delay_seconds": 0.62,
+    "post_purchase_wait_seconds": 0.85,
+    "stacked_second_purchase_delay_seconds": 0.57,
+    "publicity_end_purchase_delay_seconds": 0.29,
     "required_consecutive_publicity_absent_matches": 1,
     "purchase_click_cooldown_seconds": 1,
     "confirm_click_cooldown_seconds": 1,
@@ -56,9 +57,18 @@
       "y": 540
     },
     "server_select_click_point": {
-      "x": 1185,
-      "y": 930
+      "x": 1140,
+      "y": 917
     },
+    "launcher_game_icon_click_point": {
+      "x": 1442,
+      "y": 224
+    },
+    "recovery_iknow_click_point": {
+      "x": 963,
+      "y": 986
+    },
+    "recovery_iknow_wait_seconds": 30.0,
     "launch_to_start_page_seconds": 30.0,
     "server_select_to_character_seconds": 10.0,
     "server_character_to_start_page_seconds": 10.0,
@@ -169,10 +179,10 @@
       "path": "templates/recovery/launcher_game_icon.png",
       "threshold": 0.8,
       "region": {
-        "x": 1450,
-        "y": 430,
-        "width": 400,
-        "height": 300
+        "x": 1250,
+        "y": 60,
+        "width": 500,
+        "height": 320
       }
     },
     "server_first_character": {

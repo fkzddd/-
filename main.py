@@ -209,6 +209,7 @@ class AppConfig:
     stacked_detection_poll_interval_seconds: float
     post_purchase_wait_seconds: float
     stacked_second_purchase_delay_seconds: float
+    publicity_end_purchase_delay_seconds: float
     required_consecutive_publicity_absent_matches: int
     purchase_click_cooldown_seconds: float
     confirm_click_cooldown_seconds: float
@@ -226,6 +227,9 @@ class AppConfig:
     recovery_action_cooldown_seconds: float
     recovery_start_page_click_point: tuple[int, int]
     recovery_server_select_click_point: tuple[int, int]
+    launcher_game_icon_click_point: tuple[int, int]
+    recovery_iknow_click_point: tuple[int, int]
+    recovery_iknow_wait_seconds: float
     recovery_launch_to_start_page_seconds: float
     recovery_server_select_to_character_seconds: float
     recovery_server_character_to_start_page_seconds: float
@@ -272,7 +276,16 @@ class AppConfig:
             "start_page_click_point", {"x": 960, "y": 540}
         )
         server_select_click_point = recovery.get(
-            "server_select_click_point", {"x": 1185, "y": 930}
+            "server_select_click_point", {"x": 1140, "y": 917}
+        )
+        launcher_game_icon_click_point = recovery.get(
+            "launcher_game_icon_click_point", {"x": 1442, "y": 224}
+        )
+        recovery_iknow_click_point = recovery.get(
+            "recovery_iknow_click_point", {"x": 963, "y": 986}
+        )
+        recovery_iknow_wait_seconds = float(
+            recovery.get("recovery_iknow_wait_seconds", 30.0)
         )
         confirm_click_point = runtime.get(
             "confirm_click_point", {"x": 1095, "y": 660}
@@ -332,6 +345,9 @@ class AppConfig:
             stacked_second_purchase_delay_seconds=float(
                 runtime.get("stacked_second_purchase_delay_seconds", 0.6)
             ),
+            publicity_end_purchase_delay_seconds=float(
+                runtime.get("publicity_end_purchase_delay_seconds", 0.0)
+            ),
             required_consecutive_publicity_absent_matches=int(
                 runtime.get("required_consecutive_publicity_absent_matches", 1)
             ),
@@ -375,9 +391,18 @@ class AppConfig:
                 int(start_page_click_point.get("y", 540)),
             ),
             recovery_server_select_click_point=(
-                int(server_select_click_point.get("x", 1185)),
-                int(server_select_click_point.get("y", 930)),
+                int(server_select_click_point.get("x", 1140)),
+                int(server_select_click_point.get("y", 917)),
             ),
+            launcher_game_icon_click_point=(
+                int(launcher_game_icon_click_point.get("x", 1442)),
+                int(launcher_game_icon_click_point.get("y", 224)),
+            ),
+            recovery_iknow_click_point=(
+                int(recovery_iknow_click_point.get("x", 963)),
+                int(recovery_iknow_click_point.get("y", 986)),
+            ),
+            recovery_iknow_wait_seconds=recovery_iknow_wait_seconds,
             recovery_launch_to_start_page_seconds=float(
                 recovery.get("launch_to_start_page_seconds", 30.0)
             ),
@@ -575,10 +600,17 @@ def setup_logging(config: AppConfig) -> None:
 
     config.log_file.parent.mkdir(parents=True, exist_ok=True)
     level = getattr(logging, config.log_level, logging.INFO)
-    formatter = logging.Formatter(
-        fmt="%(asctime)s | %(levelname)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+
+    class MillisecondFormatter(logging.Formatter):
+        """毫秒级时间戳格式器：%(asctime)s 输出到毫秒。"""
+
+        def formatTime(self, record, datefmt=None):
+            from time import strftime, gmtime
+            ct = self.converter(record.created)
+            base = strftime("%Y-%m-%d %H:%M:%S", ct)
+            return f"{base}.{int(record.msecs):03d}"
+
+    formatter = MillisecondFormatter(fmt="%(asctime)s | %(levelname)s | %(message)s")
 
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
@@ -871,7 +903,7 @@ class WindowScreenCapture:
             if title and any(keyword in folded for keyword in keywords):
                 if self.user32.IsIconic(hwnd):
                     if self.config.window_restore_if_minimized:
-                        self.user32.ShowWindow(hwnd, 9)  # SW_RESTORE：恢复最小化窗口
+                        self.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
                         logging.info("已自动恢复最小化的 MuMu 窗口：%s", title)
                     else:
                         # 不主动恢复或激活窗口，避免自动化运行时抢占用户正在
@@ -1290,6 +1322,7 @@ class AutomationState(Enum):
 class RecoveryStep(Enum):
     """游戏异常退出后，从 MuMu 桌面逐步返回目标商品页面。"""
 
+    WAITING_FOR_IKNOW = auto()
     WAITING_FOR_SERVER_SELECT = auto()
     WAITING_FOR_SERVER_CHARACTER = auto()
     WAITING_FOR_START_PAGE = auto()
@@ -1334,6 +1367,10 @@ class PurchaseAutomation:
         self.completed_orders = 0
         self.consecutive_errors = 0
         self.repeated_log_counts: dict[str, int] = {}
+
+        # 公示期红色像素变化观测：记录上一次红色像素值，用于精确捕捉
+        # 倒计时分钟切换（数字变化 → 像素变化）的时刻，判断本地倒计时漂移。
+        self.last_publicity_pixels: Optional[int] = None
 
         # 自启动恢复流程只在正常目标页面的选中框消失后低频检查，因此不会在
         # 正常公示期轮询中额外抓取图标区域，也不会拖慢购买条件检测。
@@ -1489,8 +1526,11 @@ class PurchaseAutomation:
             return True
 
         stacked_detected = False
+        # 叠挂检测截止/叠挂购买点击时刻锚定"公示期结束时刻"，使叠挂点击与
+        # 确认的绝对刻度不因购买延后（publicity_end_purchase_delay_seconds）而漂移。
         stacked_deadline = (
-            first_clicked_at + self.config.stacked_second_purchase_delay_seconds
+            (self.order_status_ready_at if self.order_status_ready_at is not None else first_clicked_at)
+            + self.config.stacked_second_purchase_delay_seconds
         )
         while time.monotonic() < stacked_deadline:
             stacked_screen = self._capture_region_frame(
@@ -1544,8 +1584,16 @@ class PurchaseAutomation:
                 "第一次购买后 %.3fs 内未识别到叠挂弹窗，按单件流程执行",
                 self.config.stacked_second_purchase_delay_seconds,
             )
+            # 确认时刻锚定"公示期结束时刻 + post_purchase_wait_seconds"，
+            # 保证从公示期结束到确认的总时长不变；购买命令可能已因
+            # publicity_end_purchase_delay_seconds 延后，确认刻度不动。
+            confirm_base = (
+                self.order_status_ready_at
+                if self.order_status_ready_at is not None
+                else first_clicked_at
+            )
             confirm_target_at = (
-                first_clicked_at + self.config.post_purchase_wait_seconds
+                confirm_base + self.config.post_purchase_wait_seconds
             )
 
         self._wait_until(confirm_target_at)
@@ -1679,11 +1727,12 @@ class PurchaseAutomation:
 
     def _try_launch_game_from_mumu_home(self) -> bool:
         """
-        低频识别 MuMu 桌面上的“龙族幻想”图标。
+        自启动恢复：检测到商品选中框消失后，直接盲点 MuMu 桌面上的
+        “龙族幻想”图标固定坐标（图标位置不变，无需模板匹配）。
 
         正常商品页面存在选中框时不会调用本方法；只有选中框消失或已经进入
         恢复流程后才检查，因此不会给原有 0.05 秒公示期检测增加持续开销。
-        返回 True 表示本轮确认看到了 MuMu 桌面，无论点击是否被防抖拦截。
+        返回 True 表示本轮执行了盲点（无论点击是否被防抖拦截）。
         """
 
         if not self.config.recovery_enabled:
@@ -1696,25 +1745,14 @@ class PurchaseAutomation:
             now + self.config.recovery_home_check_interval_seconds
         )
 
-        screen = self._capture_region_frame(
-            self.config.launcher_game_icon_template.region
-        )
-        self._validate_screen_resolution(screen)
-        launcher = self.matcher.match(
-            screen, self.config.launcher_game_icon_template
-        )
-        if not launcher.matched:
-            return False
-
         logging.warning(
-            "检测到 MuMu 桌面，龙族幻想图标匹配成功：score=%.3f；开始自启动恢复",
-            launcher.score,
+            "目标商品选中框消失，盲点 MuMu 桌面龙族幻想图标固定坐标 (%d, %d)",
+            *self.config.launcher_game_icon_click_point,
         )
-        self._save_event_image(screen, launcher, "recovery_launcher_game_icon")
         action = "恢复流程-启动龙族幻想"
         clicked = self.clicker.click(
             action,
-            launcher.center,
+            self.config.launcher_game_icon_click_point,
             self.config.recovery_action_cooldown_seconds,
         )
         if not clicked:
@@ -1732,10 +1770,12 @@ class PurchaseAutomation:
         self._reset_order_timing()
         self._reset_stacked_click_timing()
         self._set_recovery_step(
-            RecoveryStep.WAITING_FOR_SERVER_SELECT,
+            RecoveryStep.WAITING_FOR_IKNOW,
             action_issued_at=action_issued_at,
-            wait_seconds=self.config.recovery_launch_to_start_page_seconds,
-            description="已点击龙族幻想图标，等待登录待机页面",
+            wait_seconds=self.config.recovery_iknow_wait_seconds,
+            description="已盲点龙族幻想图标，等待{:.0f}秒后盲点'我知道了'弹窗按钮".format(
+                self.config.recovery_iknow_wait_seconds
+            ),
         )
         return True
 
@@ -1814,14 +1854,33 @@ class PurchaseAutomation:
 
         页面状态判断和点击触发严格分开：先等待配置的最低加载时间，再抓取当前
         步骤的小 ROI 做模板匹配；只有模板达到阈值后才通过统一防抖器点击。
+        进入恢复流程后不再重复盲点图标（图标已在进入恢复时点击过），
+        避免死循环导致反复重启游戏。
         """
-
-        # 游戏在恢复途中再次崩回桌面时，从启动图标步骤重新开始。
-        if self._try_launch_game_from_mumu_home():
-            return False
 
         now = time.monotonic()
         if now < self.recovery_action_earliest_at:
+            return False
+
+        if self.recovery_step == RecoveryStep.WAITING_FOR_IKNOW:
+            # 点击龙族幻想图标后等待配置的秒数（默认15s），然后盲点
+            # 启动弹窗的"我知道了"按钮固定坐标，再进入选服步骤。
+            action = "恢复流程-盲点我知道了"
+            clicked = self.clicker.click(
+                action,
+                self.config.recovery_iknow_click_point,
+                self.config.recovery_action_cooldown_seconds,
+            )
+            if not clicked:
+                return False
+
+            action_issued_at = self.clicker.last_action_click_at[action]
+            self._set_recovery_step(
+                RecoveryStep.WAITING_FOR_SERVER_SELECT,
+                action_issued_at=action_issued_at,
+                wait_seconds=self.config.recovery_launch_to_start_page_seconds,
+                description="已盲点'我知道了'，等待登录待机页面",
+            )
             return False
 
         if self.recovery_step == RecoveryStep.WAITING_FOR_SERVER_SELECT:
@@ -2022,6 +2081,20 @@ class PurchaseAutomation:
             self._clear_repeated_log(
                 "publicity_absent", "purchase_not_matched", "purchase_matched"
             )
+            # 红色像素变化观测：倒计时数字跳变（如 7:00→6:00）会使红色像素
+            # 数发生变化，此时记录毫秒级时刻，用于测量本地倒计时漂移。
+            if (
+                self.last_publicity_pixels is not None
+                and publicity.pixel_count != self.last_publicity_pixels
+            ):
+                delta = publicity.pixel_count - self.last_publicity_pixels
+                logging.info(
+                    "倒计时红色像素变化：%d -> %d (Δ=%d)",
+                    self.last_publicity_pixels,
+                    publicity.pixel_count,
+                    delta,
+                )
+            self.last_publicity_pixels = publicity.pixel_count
             if self.poll_count % self.config.status_log_every_n_polls == 0:
                 logging.info(
                     "商品仍在公示期：红色像素=%d，判定阈值=%d",
@@ -2075,6 +2148,21 @@ class PurchaseAutomation:
         if self._should_log_repeated("purchase_matched"):
             logging.info("购买按钮匹配成功：score=%.3f", purchase.score)
         self._save_event_image(purchase_screen, purchase, "purchase_button")
+
+        # 公示期结束后延迟点击购买（T 窗口实验）：红字消失时刻为基准，延后指定秒数
+        # 再点击购买。确认时刻仍以"购买点击时刻"为基准计算，因此购买→确认间隔不变，
+        # 只是整个购买动作整体延后。
+        if self.config.publicity_end_purchase_delay_seconds > 0:
+            delay_target = (
+                self.order_status_ready_at
+                + self.config.publicity_end_purchase_delay_seconds
+            )
+            self._wait_until(delay_target)
+            logging.info(
+                "公示期结束后延迟 %.3fs 已到，点击购买（基准=红字消失时刻）",
+                self.config.publicity_end_purchase_delay_seconds,
+            )
+
         clicked = self.clicker.click(
             "购买按钮",
             purchase.center,
