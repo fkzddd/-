@@ -33,7 +33,7 @@
     "max_orders_per_run": 0,
     "poll_interval_seconds": 0.03,
     "stacked_detection_poll_interval_seconds": 0.02,
-    "post_purchase_wait_seconds": 0.85,
+    "post_purchase_wait_seconds": 0.88,
     "stacked_second_purchase_delay_seconds": 0.57,
     "publicity_end_purchase_delay_seconds": 0.29,
     "required_consecutive_publicity_absent_matches": 1,
@@ -67,6 +67,26 @@
     "recovery_iknow_click_point": {
       "x": 963,
       "y": 986
+    },
+    "server_character_click_point": {
+      "x": 723,
+      "y": 322
+    },
+    "character_start_click_point": {
+      "x": 1774,
+      "y": 913
+    },
+    "commercial_street_click_point": {
+      "x": 1829,
+      "y": 986
+    },
+    "shop_tab_click_point": {
+      "x": 1120,
+      "y": 65
+    },
+    "following_tab_click_point": {
+      "x": 1870,
+      "y": 464
     },
     "recovery_iknow_wait_seconds": 30.0,
     "launch_to_start_page_seconds": 30.0,
@@ -122,7 +142,7 @@
         255,
         255
       ],
-      "minimum_pixels": 150
+      "minimum_pixels": 300
     },
     "my_following_selected_guard": {
       "region": {

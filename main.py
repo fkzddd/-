@@ -230,6 +230,11 @@ class AppConfig:
     launcher_game_icon_click_point: tuple[int, int]
     recovery_iknow_click_point: tuple[int, int]
     recovery_iknow_wait_seconds: float
+    recovery_server_character_click_point: tuple[int, int]
+    recovery_character_start_click_point: tuple[int, int]
+    recovery_commercial_street_click_point: tuple[int, int]
+    recovery_shop_tab_click_point: tuple[int, int]
+    recovery_following_tab_click_point: tuple[int, int]
     recovery_launch_to_start_page_seconds: float
     recovery_server_select_to_character_seconds: float
     recovery_server_character_to_start_page_seconds: float
@@ -286,6 +291,21 @@ class AppConfig:
         )
         recovery_iknow_wait_seconds = float(
             recovery.get("recovery_iknow_wait_seconds", 30.0)
+        )
+        server_character_click_point = recovery.get(
+            "server_character_click_point", {"x": 723, "y": 322}
+        )
+        character_start_click_point = recovery.get(
+            "character_start_click_point", {"x": 1774, "y": 913}
+        )
+        commercial_street_click_point = recovery.get(
+            "commercial_street_click_point", {"x": 1829, "y": 986}
+        )
+        shop_tab_click_point = recovery.get(
+            "shop_tab_click_point", {"x": 1120, "y": 65}
+        )
+        following_tab_click_point = recovery.get(
+            "following_tab_click_point", {"x": 1870, "y": 464}
         )
         confirm_click_point = runtime.get(
             "confirm_click_point", {"x": 1095, "y": 660}
@@ -403,6 +423,26 @@ class AppConfig:
                 int(recovery_iknow_click_point.get("y", 986)),
             ),
             recovery_iknow_wait_seconds=recovery_iknow_wait_seconds,
+            recovery_server_character_click_point=(
+                int(server_character_click_point.get("x", 723)),
+                int(server_character_click_point.get("y", 322)),
+            ),
+            recovery_character_start_click_point=(
+                int(character_start_click_point.get("x", 1774)),
+                int(character_start_click_point.get("y", 913)),
+            ),
+            recovery_commercial_street_click_point=(
+                int(commercial_street_click_point.get("x", 1829)),
+                int(commercial_street_click_point.get("y", 986)),
+            ),
+            recovery_shop_tab_click_point=(
+                int(shop_tab_click_point.get("x", 1120)),
+                int(shop_tab_click_point.get("y", 65)),
+            ),
+            recovery_following_tab_click_point=(
+                int(following_tab_click_point.get("x", 1870)),
+                int(following_tab_click_point.get("y", 464)),
+            ),
             recovery_launch_to_start_page_seconds=float(
                 recovery.get("launch_to_start_page_seconds", 30.0)
             ),
@@ -1368,6 +1408,12 @@ class PurchaseAutomation:
         self.consecutive_errors = 0
         self.repeated_log_counts: dict[str, int] = {}
 
+        # 购买按钮匹配连续失败计数：公示期结束后若一直识别不到购买按钮
+        # （页面异常/弹窗/售罄），连续失败达到阈值后盲点龙族幻想图标
+        # 触发自启动恢复（重进游戏），避免无限重试卡死。
+        self.purchase_button_fail_count = 0
+        self.purchase_button_fail_limit = 10
+
         # 公示期红色像素变化观测：记录上一次红色像素值，用于精确捕捉
         # 倒计时分钟切换（数字变化 → 像素变化）的时刻，判断本地倒计时漂移。
         self.last_publicity_pixels: Optional[int] = None
@@ -1769,11 +1815,13 @@ class PurchaseAutomation:
         self.publicity_absent_hits = 0
         self._reset_order_timing()
         self._reset_stacked_click_timing()
+        # 注：游戏已不再弹出"我知道了"公告界面，跳过 WAITING_FOR_IKNOW 步骤，
+        # 点击图标后直接进入选服步骤。
         self._set_recovery_step(
-            RecoveryStep.WAITING_FOR_IKNOW,
+            RecoveryStep.WAITING_FOR_SERVER_SELECT,
             action_issued_at=action_issued_at,
             wait_seconds=self.config.recovery_iknow_wait_seconds,
-            description="已盲点龙族幻想图标，等待{:.0f}秒后盲点'我知道了'弹窗按钮".format(
+            description="已盲点龙族幻想图标，等待{:.0f}秒后点击选服".format(
                 self.config.recovery_iknow_wait_seconds
             ),
         )
@@ -1781,21 +1829,24 @@ class PurchaseAutomation:
 
     def _recovery_step_action(
         self,
-    ) -> tuple[TemplateSpec, str, RecoveryStep, float, str]:
-        """返回当前恢复页面的识别模板、点击动作以及下一步等待参数。"""
+    ) -> tuple[tuple[int, int], str, RecoveryStep, float, str]:
+        """返回当前恢复页面的固定点击坐标、点击动作以及下一步等待参数。
+
+        全部步骤使用固定坐标盲点（用户实测校准），不再依赖模板匹配。
+        """
 
         step = self.recovery_step
         if step == RecoveryStep.WAITING_FOR_SERVER_CHARACTER:
             return (
-                self.config.server_first_character_template,
-                "恢复流程-选择服务器角色-哇卟叽叽",
+                self.config.recovery_server_character_click_point,
+                "恢复流程-选择服务器角色",
                 RecoveryStep.WAITING_FOR_START_PAGE,
                 self.config.recovery_server_character_to_start_page_seconds,
-                "已选择第一行第一列角色哇卟叽叽，等待返回登录待机页面",
+                "已选择服务器角色，等待返回登录待机页面",
             )
         if step == RecoveryStep.WAITING_FOR_CHARACTER_START:
             return (
-                self.config.character_start_template,
+                self.config.recovery_character_start_click_point,
                 "恢复流程-角色开始",
                 RecoveryStep.WAITING_FOR_MAIN_UI,
                 self.config.recovery_character_to_main_ui_seconds,
@@ -1803,7 +1854,7 @@ class PurchaseAutomation:
             )
         if step == RecoveryStep.WAITING_FOR_MAIN_UI:
             return (
-                self.config.commercial_street_template,
+                self.config.recovery_commercial_street_click_point,
                 "恢复流程-商业街",
                 RecoveryStep.WAITING_FOR_SHOP_TAB,
                 self.config.recovery_commercial_to_shop_seconds,
@@ -1811,7 +1862,7 @@ class PurchaseAutomation:
             )
         if step == RecoveryStep.WAITING_FOR_SHOP_TAB:
             return (
-                self.config.shop_tab_template,
+                self.config.recovery_shop_tab_click_point,
                 "恢复流程-店铺",
                 RecoveryStep.WAITING_FOR_FOLLOWING_TAB,
                 self.config.recovery_shop_to_following_seconds,
@@ -1819,7 +1870,7 @@ class PurchaseAutomation:
             )
         if step == RecoveryStep.WAITING_FOR_FOLLOWING_TAB:
             return (
-                self.config.my_following_template,
+                self.config.recovery_following_tab_click_point,
                 "恢复流程-我的关注",
                 RecoveryStep.WAITING_FOR_TARGET_PAGE,
                 self.config.recovery_following_to_resume_seconds,
@@ -1862,26 +1913,25 @@ class PurchaseAutomation:
         if now < self.recovery_action_earliest_at:
             return False
 
-        if self.recovery_step == RecoveryStep.WAITING_FOR_IKNOW:
-            # 点击龙族幻想图标后等待配置的秒数（默认15s），然后盲点
-            # 启动弹窗的"我知道了"按钮固定坐标，再进入选服步骤。
-            action = "恢复流程-盲点我知道了"
-            clicked = self.clicker.click(
-                action,
-                self.config.recovery_iknow_click_point,
-                self.config.recovery_action_cooldown_seconds,
-            )
-            if not clicked:
-                return False
-
-            action_issued_at = self.clicker.last_action_click_at[action]
-            self._set_recovery_step(
-                RecoveryStep.WAITING_FOR_SERVER_SELECT,
-                action_issued_at=action_issued_at,
-                wait_seconds=self.config.recovery_launch_to_start_page_seconds,
-                description="已盲点'我知道了'，等待登录待机页面",
-            )
-            return False
+        # 注：游戏已不再弹出"我知道了"公告界面，此步骤已停用。
+        # 如需恢复，取消下面的注释并确保 recovery_iknow_wait_seconds 生效。
+        # if self.recovery_step == RecoveryStep.WAITING_FOR_IKNOW:
+        #     action = "恢复流程-盲点我知道了"
+        #     clicked = self.clicker.click(
+        #         action,
+        #         self.config.recovery_iknow_click_point,
+        #         self.config.recovery_action_cooldown_seconds,
+        #     )
+        #     if not clicked:
+        #         return False
+        #     action_issued_at = self.clicker.last_action_click_at[action]
+        #     self._set_recovery_step(
+        #         RecoveryStep.WAITING_FOR_SERVER_SELECT,
+        #         action_issued_at=action_issued_at,
+        #         wait_seconds=self.config.recovery_launch_to_start_page_seconds,
+        #         description="已盲点'我知道了'，等待登录待机页面",
+        #     )
+        #     return False
 
         if self.recovery_step == RecoveryStep.WAITING_FOR_SERVER_SELECT:
             # 登录待机页背景是持续动画，模板分数会随画面变化。启动游戏并完成
@@ -1927,83 +1977,30 @@ class PurchaseAutomation:
             return False
 
         if self.recovery_step == RecoveryStep.WAITING_FOR_FOLLOWING_TAB:
-            # “店铺”会记住上一次打开的左侧栏目。先检查“我的关注”这一行本身
-            # 是否已经呈青色选中背景；只有它确实被选中时才跳过重复点击。
-            # 商品区域在其他店铺栏目也可能出现青色选中框，不能用商品选中框
-            # 代替左侧栏目的状态判断。
-            following_screen = self._capture_region_frame(
-                self.config.my_following_selected_guard.region
-            )
-            self._validate_screen_resolution(following_screen)
-            following_selected = self.color_detector.detect(
-                following_screen, self.config.my_following_selected_guard
-            )
-            if following_selected.present:
-                logging.info(
-                    "自启动恢复：店铺已直接打开我的关注，栏目选中背景像素=%d；"
-                    "跳过重复点击",
-                    following_selected.pixel_count,
-                )
-                self._set_recovery_step(
-                    RecoveryStep.WAITING_FOR_TARGET_PAGE,
-                    action_issued_at=now,
-                    wait_seconds=0.0,
-                    description="已确认我的关注栏目处于选中状态，等待目标商品页面",
-                )
-                return False
+            # 统一使用固定坐标点击"我的关注"（用户实测坐标），不再依赖
+            # 颜色检测判断是否已选中；确保最后一步总是被执行。
+            pass  # 走下方 _recovery_step_action() 的固定坐标点击
 
         if self.recovery_step == RecoveryStep.WAITING_FOR_TARGET_PAGE:
-            # 只有进入/点击“我的关注”以后，目标位置的商品选中框才可作为最终
-            # 页面加载完成的依据，避免其他店铺栏目中的相似青色框提前结束恢复。
-            screen = self._capture_region_frame(self.config.selection_guard.region)
-            self._validate_screen_resolution(screen)
-            selection = self.color_detector.detect(
-                screen, self.config.selection_guard
+            # 点完"我的关注"后等待固定时间（following_to_resume_seconds），
+            # 直接恢复公示期检测，不再依赖商品选中框颜色判断。
+            logging.info(
+                "自启动恢复完成：已点击我的关注，等待%.1fs后恢复公示期检测",
+                self.config.recovery_following_to_resume_seconds,
             )
-            if selection.present:
-                logging.info(
-                    "自启动恢复完成：已回到我的关注目标页面，选中框青色像素=%d；"
-                    "恢复公示期检测",
-                    selection.pixel_count,
-                )
-                self.state = AutomationState.WAITING_FOR_STATUS
-                self.recovery_step = None
-                self.publicity_absent_hits = 0
-                self.next_recovery_home_check_at = (
-                    time.monotonic()
-                    + self.config.recovery_home_check_interval_seconds
-                )
-                self._clear_repeated_log("recovery_target_not_matched")
-                return False
-
-            self._log_recovery_step_timeout("我的关注目标页面", 0.0)
+            self.state = AutomationState.WAITING_FOR_STATUS
+            self.recovery_step = None
+            self.publicity_absent_hits = 0
+            self.next_recovery_home_check_at = (
+                time.monotonic()
+                + self.config.recovery_home_check_interval_seconds
+            )
+            self._clear_repeated_log("recovery_target_not_matched")
             return False
 
-        template, action, next_step, next_wait, description = (
+        click_point, action, next_step, next_wait, description = (
             self._recovery_step_action()
         )
-        screen = self._capture_region_frame(template.region)
-        self._validate_screen_resolution(screen)
-        target = self.matcher.match(screen, template)
-        if not target.matched:
-            if self._should_log_repeated("recovery_target_not_matched"):
-                logging.info(
-                    "自启动恢复等待页面：%s score=%.3f threshold=%.3f",
-                    template.name,
-                    target.score,
-                    template.threshold,
-                )
-            self._log_recovery_step_timeout(template.name, target.score)
-            return False
-
-        self._clear_repeated_log("recovery_target_not_matched")
-        logging.info(
-            "自启动恢复页面匹配成功：%s score=%.3f",
-            template.name,
-            target.score,
-        )
-        self._save_event_image(screen, target, f"recovery_{template.name}")
-        click_point = target.center
         clicked = self.clicker.click(
             action,
             click_point,
@@ -2135,15 +2132,35 @@ class PurchaseAutomation:
         purchase = self.matcher.match(purchase_screen, self.config.purchase_template)
         if not purchase.matched:
             self._clear_repeated_log("purchase_matched")
+            self.purchase_button_fail_count += 1
             if self._should_log_repeated("purchase_not_matched"):
                 logging.warning(
-                    "状态已满足，但购买按钮未达到阈值：score=%.3f threshold=%.3f；稍后重试",
+                    "状态已满足，但购买按钮未达到阈值：score=%.3f threshold=%.3f；"
+                    "连续失败 %d/%d",
                     purchase.score,
                     self.config.purchase_template.threshold,
+                    self.purchase_button_fail_count,
+                    self.purchase_button_fail_limit,
                 )
+            # 连续失败达到阈值：页面异常（弹窗/售罄/非商品页），
+            # 盲点龙族幻想图标触发自启动恢复（重进游戏），避免无限重试卡死。
+            if self.purchase_button_fail_count >= self.purchase_button_fail_limit:
+                logging.warning(
+                    "购买按钮连续失败 %d 次，盲点龙族幻想图标触发自启动恢复",
+                    self.purchase_button_fail_count,
+                )
+                self.purchase_button_fail_count = 0
+                self.publicity_absent_hits = 0
+                self._reset_order_timing()
+                if self._try_launch_game_from_mumu_home():
+                    self._clear_repeated_log(
+                        "publicity_absent", "purchase_not_matched", "purchase_matched"
+                    )
+                    return False
             return False
 
         purchase_button_matched_at = time.monotonic()
+        self.purchase_button_fail_count = 0
         self._clear_repeated_log("purchase_not_matched")
         if self._should_log_repeated("purchase_matched"):
             logging.info("购买按钮匹配成功：score=%.3f", purchase.score)
